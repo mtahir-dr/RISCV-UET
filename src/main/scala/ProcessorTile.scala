@@ -21,6 +21,7 @@ import chisel3.util._
 
 class TileIO extends Bundle {
   val debug  = new DebugIO
+  val irq  = new IrqIO
 }
 
 trait TileBase extends core.BaseModule {
@@ -35,13 +36,14 @@ class ProcessorTile(initFile: String) extends Module with TileBase {
   val imem = Module(new InstMem(initFile))
   val dmem = Module(new DataMem)
  
-  io.debug  <> core.io.debug  
+  io.debug  <> core.io.debug
+  io.irq  <> core.io.irq
   core.io.imem <> imem.io
   core.io.dmem <> dmem.io
 }
 
 object ProcessorTile_generate extends App {
-var initFile = "src/test/resources/fib.txt"
+var initFile = "src/test/resources/test3.txt"
 
   chisel3.Driver.execute(args, () => new ProcessorTile(initFile))
 } 

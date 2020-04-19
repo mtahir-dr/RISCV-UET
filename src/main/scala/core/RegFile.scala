@@ -24,7 +24,7 @@ class RegFileIO  extends Bundle with Config {
 
 class RegFile extends Module with Config {
   val io = IO(new RegFileIO)
-  val regs = Mem(32, UInt(XLEN.W))
+  val regs = Mem(REGFILE_LEN, UInt(XLEN.W))
   // loadMemoryFromFile(regfile, "initmem/regfile.txt")
 
   io.rdata1 := Mux((io.raddr1.orR), regs(io.raddr1), 0.U)

@@ -20,32 +20,22 @@ trait Config {
   val HLEN           = 16
   val WLEN           = 32
   val XLEN           = 32
-  val INST_MEM_LEN = 2048
+  val INST_MEM_LEN   = 2048
   val REG_LEN        = 5
   val REGFILE_LEN    = 32
   val OPCODE_LEN     = 7
-  val DATA_MEM_LEN = 32
+  val DATA_MEM_LEN   = 1024
+  val NOT_EMBEDDED   = false
 
   // control signal's width
-  val PC_WRITE_SIG_LEN      = 1
-  val IF_ID_WRITE_SIG_LEN   = 1
   val REGWRITE_SIG_LEN      = 1
-  val IMM_SEL_SIG_LEN       = 3
   val ALU_SRC_SIG_LEN       = 1
   val ALUOP_SIG_LEN         = 4
-  val BRANCH_SIG_LEN        = 1
   val MEM_WRITE_SIG_LEN     = 1
   val MEM_READ_SIG_LEN      = 1
-  val REG_SRC_SIG_LEN       = 3
-  val CONFLAG_SIGLEN        = 1
-  val PC_SRC_SIG_LEN        = 1
   val DATA_SIZE_SIG_LEN     = 2
   val LOAD_TYPE_SIG_LEN     = 3
-  val BRANCH_SRC_SIG_LEN    = 1
-  val JUMP_TYPE_SIG_LEN     = 1
   val MEMWRITE_SRC_SIG_LEN  = 1
-  val PC_SEL_SIG_LEN        = 2
-  val ADDR_BUFFER_FLUSH_LEN = 1
 }
 
 

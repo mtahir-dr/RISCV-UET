@@ -1,17 +1,16 @@
-/*********************************************************************
+/******************************************************************************
 * Filename :    Core.scala
 * Date     :    28-03-2020
 * 
-* Description:  Based on riscv mini. Modified cache memory interface
-*               to simple Inst/Data memory interfaces
+* Description:  Based on riscv mini. Modified cache memory interfaces
+*               to simple Inst/Data memory interfaces, resolved load-use
+*               hazards by stalling and added support for external interrupts
 *
-* 13-04-2020    The HostIO interface is temporarily disabled. 
-*               The store operation is completed in 2 cycles.
-*               The load operation loads data in a temporary register
-*               'ld_data' at the end of cycle 2 and is loaded to
-*               register file at the start of cycle 4. There is one 
-*               cycle pipeline stall for load instructions by default. 
-*********************************************************************/
+* 5-05-2020    The load operation loads data in a temporary register 'ld_data'
+*               at the start of cycle 3 and is loaded to register file at the
+*               start of cycle 4. There is one cycle pipeline stall for load
+*               instructions in case of load use hazard.
+*******************************************************************************/
 
 
 package riscv_uet
@@ -20,22 +19,16 @@ import chisel3._
 import chisel3.util._
 
 import CONSTANTS._
+import CSR._
 
 object Const {
   val PC_START = 0x4
-  val PC_EVEC  = 0x500
-}
-
-class DebugIO extends Bundle with Config {
-  val inst      = Output(UInt(XLEN.W))
-  val regWaddr  = Output(UInt(5.W))
-  val regWdata  = Output(UInt(XLEN.W))
-  val pc        = Output(UInt(XLEN.W))
+  val PC_EVEC  = 0x61  // vectored interrupt handling by default (mode = 1)
 }
 
 class DatapathIO extends Bundle {
- // MT val host  = new HostIO
   val debug = new DebugIO
+  val irq = new IrqIO
   val imem  = Flipped(new InstMemIO)
   val dmem  = Flipped(new DataMemIO)
   val ctrl  = Flipped(new ControlSignals)
@@ -49,7 +42,6 @@ class Datapath extends Module with Config {
   val immGen  = Module(new ImmGen) 
   val brCond  = Module(new Branch) 
 
-  import Control._
 
   /***** Fetch / Execute Registers *****/
   val fe_inst = RegInit(Instructions.NOP)
@@ -60,7 +52,7 @@ class Datapath extends Module with Config {
   val ew_pc   = Reg(UInt())
   val ew_alu  = Reg(UInt())
   val csr_in  = Reg(UInt())
-  val ld_data = Reg(UInt(XLEN.W)) 
+  // val ld_data = Reg(UInt(XLEN.W))  // MT was used for Asynchronous data mem
 
   /****** Control signals *****/
   val st_type  = Reg(io.ctrl.st_type.cloneType)
@@ -72,23 +64,22 @@ class Datapath extends Module with Config {
   val pc_check = Reg(Bool())
  
   /****** Fetch *****/
-  val started = RegNext(reset.toBool) // MT false.B 
-  val stall = false.B    // MT !io.icache.resp.valid || !io.dcache.resp.valid
+  val notstarted = RegNext(reset.toBool)
+  // MT stall is used to manage load-use hazard (for Load and CSR instructions)
+  val stall = Wire(Bool())
   val pc   = RegInit(Const.PC_START.U(XLEN.W) - 4.U(XLEN.W))
-  val npc  = Mux(stall, pc, Mux(csr.io.expt, csr.io.evec,
+  val npc  = Mux(stall , pc, Mux(csr.io.expt, csr.io.evec,
              Mux(io.ctrl.pc_sel === PC_EPC,  csr.io.epc,
              Mux(io.ctrl.pc_sel === PC_ALU || brCond.io.taken, alu.io.sum >> 1.U << 1.U,
              Mux(io.ctrl.pc_sel === PC_0, pc, pc + 4.U)))))
-  val inst = Mux(started || io.ctrl.inst_kill || brCond.io.taken || csr.io.expt, Instructions.NOP, io.imem.inst)   // io.icache.resp.bits.data  
-  pc                      := npc 
-  io.imem.addr := npc  // io.icache.req.bits.addr := npc // MT Changed npc to pc to synchronize the instruction fetch from instruction memory
- 
-/* MT io.icache.req.bits.data := 0.U
-  io.icache.req.bits.mask := 0.U
-  io.icache.req.valid     := !stall
-  io.icache.abort         := false.B */
+
+  val inst = Mux(notstarted || io.ctrl.inst_kill || brCond.io.taken || csr.io.expt, Instructions.NOP, io.imem.inst)
+  pc           := npc
+  io.imem.addr := npc  // address for next instruction fetch from instruction memory
+
  
   // Pipelining
+  // updating fetch-execute pipeline registers
   when (!stall) {
     fe_pc   := pc
     fe_inst := inst
@@ -105,7 +96,7 @@ class Datapath extends Module with Config {
   regFile.io.raddr1 := rs1_addr
   regFile.io.raddr2 := rs2_addr
 
-  // gen immdeates
+  // gen immediate
   immGen.io.inst := fe_inst
   immGen.io.sel  := io.ctrl.imm_sel
 
@@ -115,32 +106,35 @@ class Datapath extends Module with Config {
   val rs2hazard = wb_en && rs2_addr.orR && (rs2_addr === wb_rd_addr)
   val rs1 = Mux(wb_sel === WB_ALU && rs1hazard, ew_alu, regFile.io.rdata1) 
   val rs2 = Mux(wb_sel === WB_ALU && rs2hazard, ew_alu, regFile.io.rdata2)
+
+  // MT -- load-use and CSRs hazard detection. The pipeline is stalled since the hazard can not be resolved using
+  // forwarding/bypassing
+  stall := (ld_type.orR || csr_cmd =/= CSR.Z) && ((io.ctrl.en_rs1 && rs1hazard) || (io.ctrl.en_rs2 && rs2hazard))
  
   // ALU operations
   alu.io.in_A := Mux(io.ctrl.A_sel === A_RS1, rs1, fe_pc)
   alu.io.in_B := Mux(io.ctrl.B_sel === B_RS2, rs2, immGen.io.out)
   alu.io.alu_Op := io.ctrl.alu_op
 
-  // Branch condition calc
+  // Branch condition calculation
   brCond.io.rs1 := rs1 
   brCond.io.rs2 := rs2
   brCond.io.br_type := io.ctrl.br_type
 
-  // D$ access
-  val daddr   = Mux(stall, ew_alu, alu.io.sum) // MT >> 2.U << 2.U (seems it was done for word allignment)
- //MT val woffset = alu.io.sum(1) << 4.U | alu.io.sum(0) << 3.U
-  io.dmem.addr     := daddr 
+  // Data memory access
+  io.dmem.addr     := alu.io.sum
   
-  io.dmem.wr_en    := !stall && io.ctrl.st_type.orR 
-  io.dmem.st_type  := Mux(stall, st_type, io.ctrl.st_type)
-  io.dmem.wdata    := MuxLookup(Mux(stall, st_type, io.ctrl.st_type), 
+  io.dmem.wr_en    := Mux(stall, ST_XXX.orR, io.ctrl.st_type.orR)  // MT -- stall for Load-use hazard
+  io.dmem.st_type  := io.ctrl.st_type
+  io.dmem.wdata    := MuxLookup(io.ctrl.st_type,
                                 0.U , Seq(    // MT -- have used default value of 0.U should be reconsidered
     ST_SW -> rs2 ,
     ST_SH -> rs2(15, 0) ,
     ST_SB -> rs2(7, 0) )).asUInt
  
  
-  // Pipelining
+  // MT Pipelining control signals updation for exception/interrupt, stall and normal conditions
+  // MT -- TO DO -- what if we have stall and exception simultaneously?
   when(reset.toBool || !stall && csr.io.expt) {
     st_type   := 0.U
     ld_type   := 0.U
@@ -149,9 +143,11 @@ class Datapath extends Module with Config {
     illegal   := false.B
     pc_check  := false.B
   }.elsewhen(!stall && !csr.io.expt) {
+    // updating execute-writeback pipeline registers
     ew_pc     := fe_pc
     ew_inst   := fe_inst
     ew_alu    := alu.io.out
+    // updating control signals for writeback stage
     csr_in    := Mux(io.ctrl.imm_sel === IMM_Z, immGen.io.out, rs1)
     st_type   := io.ctrl.st_type
     ld_type   := io.ctrl.ld_type
@@ -160,20 +156,25 @@ class Datapath extends Module with Config {
     csr_cmd   := io.ctrl.csr_cmd
     illegal   := io.ctrl.illegal
     pc_check  := io.ctrl.pc_sel === PC_ALU
+  }.elsewhen(stall && !csr.io.expt) {
+    // MT clearing wirteback signals to stop stalled instruction from updating register-files and memory, rather
+    // they will be updated in the next cycle with correct data from the preceding instruction (which was the
+    // source of stalling)
+    st_type   := ST_XXX
+    ld_type   := LD_XXX
+    wb_en     := false.B
+    csr_cmd   := CSR.Z
   }
 
-  // Load
-  io.dmem.rd_en     := !stall && io.ctrl.ld_type.orR
-  io.dmem.ld_type  := Mux(stall, ld_type, io.ctrl.ld_type)
-
-//  val loffset = ew_alu(1) << 4.U | ew_alu(0) << 3.U
-  ld_data  := io.dmem.rdata 
+  //  data memory load operation
+  io.dmem.rd_en    := ld_type.orR
+  io.dmem.ld_type  := io.ctrl.ld_type
+  val ld_data  = io.dmem.rdata             // MT use "ld_data:= " instead for Asynchronous data memory
   val load    = MuxLookup(ld_type, io.dmem.rdata.zext, Seq(
     LD_LW  -> ld_data.zext,
     LD_LH  -> ld_data(15, 0).asSInt, LD_LB  -> ld_data(7, 0).asSInt,
     LD_LHU -> ld_data(15, 0).zext,   LD_LBU -> ld_data(7, 0).zext) )
 
-    
   // CSR access
   csr.io.stall    := stall
   csr.io.in       := csr_in
@@ -185,7 +186,8 @@ class Datapath extends Module with Config {
   csr.io.pc_check := pc_check
   csr.io.ld_type  := ld_type
   csr.io.st_type  := st_type
- // MT io.host <> csr.io.host 
+  // MT Added support for external interrupts (IRQs)
+  csr.io.irq  <> io.irq
 
   // Regfile Write
   val regWrite = MuxLookup(wb_sel, ew_alu.zext, Seq(
@@ -193,12 +195,9 @@ class Datapath extends Module with Config {
     WB_PC4 -> (ew_pc + 4.U).zext,
     WB_CSR -> csr.io.out.zext) ).asUInt 
 
-  regFile.io.wen   := wb_en && !stall && !csr.io.expt 
+  regFile.io.wen   := wb_en && !csr.io.expt
   regFile.io.waddr := wb_rd_addr
   regFile.io.wdata := regWrite
-
-  // Abort store when there's an excpetion
-//MT  io.dcache.abort := csr.io.expt
 
 /* MT  if (p(Trace)) {
     printf("PC: %x, INST: %x, REG[%d] <- %x\n", ew_pc, ew_inst,
@@ -211,7 +210,6 @@ class Datapath extends Module with Config {
   io.debug.regWaddr := wb_rd_addr
   io.debug.regWdata := regWrite
   io.debug.pc       := fe_pc
-
 }
 
 object Datapath_generate extends App {

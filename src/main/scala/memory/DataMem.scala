@@ -3,8 +3,8 @@
 * Date     :    28-03-2020
 * 
 * Description:  Test data memory, 1024 Bytes, 32 Words, implemented 
-*               using 'Mem'. The memory size can be changed in 
-*               Configurations.scala.
+*               using synchronous read memory'SyncReadMem'. The memory
+ *              size can be changed in Configurations.scala.
 *
 * 13-04-2020    Supports variable length as well as unaligned
 *               load and store
@@ -34,7 +34,7 @@ class DataMem extends Module with Config {
   val io = IO(new DataMemIO)
 
   // DATA_CAHCE_LEM Byte and DATA_CAHCE_LEM / 4 Words
-  val dmem = Mem(DATA_MEM_LEN, UInt(BLEN.W))
+  val dmem = SyncReadMem(DATA_MEM_LEN, UInt(BLEN.W))
  // loadMemoryFromFile(dmem, "resources/datamem.txt")
 
 

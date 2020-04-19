@@ -4,7 +4,7 @@
 * Author:        M Tahir
 *
 * Description:   This is a simple test based on Chisel3 iotesters  
-*                using FIRRTL compiler.
+*                using Treadle compiler.
 *
 * Issues:        
 *                 
@@ -30,60 +30,73 @@ class TestCore(c: ProcessorTile) // traceFile: String, genTrace: Boolean
       extends PeekPokeTester(c) {
   //val endFlag = BigInt("deadc0de", 16)
 
- /*   do{
-        step(1)
-      } while (peek(c.io.pc) == 0x204) */
-      
       step(1)
-      println(f" pc: 0x${peek(c.io.debug.pc)}%x")
-      println(f" inst: 0x${peek(c.io.debug.inst)}%x")
-      
       step(1)
-      println(f" pc: 0x${peek(c.io.debug.pc)}%x")
-      println(f" inst: 0x${peek(c.io.debug.inst)}%x")
+      step(1)
+      step(1)
 
       step(1)
       println(f" pc: 0x${peek(c.io.debug.pc)}%x")
       println(f" inst: 0x${peek(c.io.debug.inst)}%x")
+      expect(c.io.debug.regWaddr, 0x06)
 
       step(1)
       println(f" pc: 0x${peek(c.io.debug.pc)}%x")
       println(f" inst: 0x${peek(c.io.debug.inst)}%x")
+      expect(c.io.debug.regWaddr, 0x0A) 
 
       step(1)
       println(f" pc: 0x${peek(c.io.debug.pc)}%x")
       println(f" inst: 0x${peek(c.io.debug.inst)}%x")
+      expect(c.io.debug.regWaddr, 0x0B) 
 
-      for (i <- 0 until 32) {
+      step(1)
+      println(f" pc: 0x${peek(c.io.debug.pc)}%x")
+      println(f" inst: 0x${peek(c.io.debug.inst)}%x")
+      expect(c.io.debug.regWaddr, 0x0C) 
+
+      step(1)
+      println(f" pc: 0x${peek(c.io.debug.pc)}%x")
+      println(f" inst: 0x${peek(c.io.debug.inst)}%x")
+      expect(c.io.debug.regWaddr, 0x05) 
+
+      for (i <- 0 until 16) {
         step(1)
       }
+
+      var uart_Int = true.B
+      poke(c.io.irq.uartIrq, uart_Int)
+
+      for (i <- 0 until 10) {
+            step(1)
+      }
+      uart_Int = false.B
+      poke(c.io.irq.uartIrq, uart_Int)
+
+      for (i <- 0 until 8) {
+            step(1)
+      }
+
+      uart_Int = true.B
+      poke(c.io.irq.uartIrq, uart_Int)
+      step(1)
+      step(1)
+      uart_Int = false.B
+      poke(c.io.irq.uartIrq, uart_Int)
+
+      for (i <- 0 until 20) {
+            step(1)
+      }
+
 }
 
 
 object Core_Main extends App {
-  var initFile = "src/test/resources/test3.txt"
-  var traceFile = ""
-  var genTrace = false
-
- /* val manager = ArgParser(args, (o, v) => {
-    o match {
-      case Some("--init-file") | Some("-if") => initFile = v; true
-      case Some("--trace-file") | Some("-tf") => traceFile = v; true
-      case Some("--gen-trace") | Some("-gt") => genTrace = v != "0"; true
-      case _ => false
-    }
-  }) */
+  var initFile = "src/test/resources/test4.txt"
   
- /* Driver.execute(args, () => new ProcessorTile) {
-    (c) => new TestCore(c)
-  } 
-  
-   Driver.execute(() => new ProcessorTile(initFile), manager) ) {
-     c => new CoreUnitTester(c, traceFile, genTrace)
-  } */
-
   iotesters.Driver.execute(Array("--generate-vcd-output", "on", "--backend-name", "treadle"), () => new ProcessorTile(initFile)) {
     c => new TestCore(c)
   } 
 
 }
+

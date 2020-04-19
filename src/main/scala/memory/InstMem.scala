@@ -28,15 +28,15 @@ class InstMemIO extends Bundle with Config {
 class InstMem(initFile: String) extends Module with Config {
   val io = IO(new InstMemIO)
 
-  // INST_MEM_LEN Byte and INST_MEM_LEN / 4 Words
-  val imem = Mem(INST_MEM_LEN, UInt(WLEN.W))
+  // instruction memory with word aligned reads
+  val imem = SyncReadMem(INST_MEM_LEN, UInt(WLEN.W))
 
     // loadMemoryFromFile(imem , "src/test/resources/fib.txt")
    loadMemoryFromFile(imem , initFile)
 
   // io.inst := Cat(imem (io.addr), imem (io.addr + 1.U), imem (io.addr + 2.U), imem (io.addr + 3.U))
    
-   io.inst := imem (io.addr / 4.U)  // 0x00000013.U 
+   io.inst := imem (io.addr / 4.U)  // 0x00000013.U
    
 }
 

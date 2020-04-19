@@ -19,9 +19,22 @@ class HostIO extends Bundle with Config {
   val tohost   = Output(UInt(XLEN.W))
 } */
 
+class DebugIO extends Bundle with Config {
+  val inst      = Output(UInt(XLEN.W))
+  val regWaddr  = Output(UInt(5.W))
+  val regWdata  = Output(UInt(XLEN.W))
+  val pc        = Output(UInt(XLEN.W))
+}
+
+class IrqIO extends Bundle {
+  val uartIrq  = Input(Bool())
+ // val timerIrq  = Input(Bool())
+}
+
 class CoreIO extends Bundle {
 // MT  val host  = new HostIO
   val debug = new DebugIO
+  val irq   = new IrqIO
   val imem  = Flipped((new InstMemIO))
   val dmem  = Flipped((new DataMemIO))
 }
@@ -33,6 +46,7 @@ class Core extends Module {
 
 // MT  io.host <> dpath.io.host
   io.debug <> dpath.io.debug
+  io.irq <> dpath.io.irq
   dpath.io.imem <> io.imem 
   dpath.io.dmem <> io.dmem 
   dpath.io.ctrl <> ctrl.io
