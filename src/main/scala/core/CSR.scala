@@ -16,50 +16,6 @@ import chisel3.util._
 
 import CONSTANTS._
 
-object CSR {
-  val Z = 0.U(3.W)
-  val W = 1.U(3.W)
-  val S = 2.U(3.W)
-  val C = 3.U(3.W)
-  val P = 4.U(3.W)
-
-  // MT -- Supports machine mode. User mode only executes the user code and does not
-  // service user mode interrupt requests (see Standard extension N for user mode interrupts)
-  val PRV_U = 0x0.U(2.W)
-  val PRV_M = 0x3.U(2.W)
-
-  // MT -- All the registers with CSR address bits(11:10) set, are read only registers
-  // User-level CSR addresses and are readonly
-  val CYCLE        = 0xC00.U(12.W)
-  val TIME         = 0xC01.U(12.W)
-  val INSTRET      = 0xC02.U(12.W)
-  val CYCLEH       = 0xC80.U(12.W)
-  val TIMEH        = 0xC81.U(12.W)
-  val INSTRETH     = 0xC82.U(12.W)
-
-  /* Machine-level CSR address definitions */
-  // machine information registers (read only)
-  val MVENDORID    = 0xF11.U(12.W)
-  val MARCHID      = 0xF12.U(12.W)
-  val MIMPID       = 0xF13.U(12.W)
-  val MHARTID      = 0xF14.U(12.W)
-
-  // Machine trap setup related address definitions. Interrupt/exception delegation is not supported
-  val MSTATUS      = 0x300.U(12.W)
-  val MISA         = 0x301.U(12.W)
-  val MIE          = 0x304.U(12.W)
-  val MTVEC        = 0x305.U(12.W)
-
-  // Machine trap handling related register address definitions
-  val MSCRATCH     = 0x340.U(12.W)
-  val MEPC         = 0x341.U(12.W)
-  val MCAUSE       = 0x342.U(12.W)
-  val MTVAL        = 0x343.U(12.W)
-  val MIP          = 0x344.U(12.W)
-
-  // Machine time (timer) is required to be implemented as memory mapped
-}
-
 // MT -- interrupt exception cause definitions
 object Cause {
   val CAUSE_WIDTH         = 30
@@ -75,56 +31,95 @@ object Cause {
   val mUart               = 0x1.U(CAUSE_WIDTH.W)   // MT -- defined for testing, should be >= 16
 }
 
+object CSR {
+  val Z          = 0.U(3.W)
+  val W          = 1.U(3.W)
+  val S          = 2.U(3.W)
+  val C          = 3.U(3.W)
+  val P          = 4.U(3.W)
 
+  // MT -- Supports machine mode. User mode only executes the user code and does not
+  // service user mode interrupt requests (see Standard extension N for user mode interrupts)
+  val PRV_U      = 0x0.U(2.W)
+  val PRV_M      = 0x3.U(2.W)
+
+  // MT -- All the registers with CSR address bits(11:10) set, are read only registers
+  // User-level CSR addresses and are readonly
+  val CYCLE      = 0xC00.U(12.W)
+  val TIME       = 0xC01.U(12.W)
+  val INSTRET    = 0xC02.U(12.W)
+  val CYCLEH     = 0xC80.U(12.W)
+  val TIMEH      = 0xC81.U(12.W)
+  val INSTRETH   = 0xC82.U(12.W)
+
+  /* Machine-level CSR address definitions */
+  // machine information registers (read only)
+  val MVENDORID  = 0xF11.U(12.W)
+  val MARCHID    = 0xF12.U(12.W)
+  val MIMPID     = 0xF13.U(12.W)
+  val MHARTID    = 0xF14.U(12.W)
+
+  // Machine trap setup related address definitions. Interrupt/exception delegation is not supported
+  val MSTATUS    = 0x300.U(12.W)
+  val MISA       = 0x301.U(12.W)
+  val MIE        = 0x304.U(12.W)
+  val MTVEC      = 0x305.U(12.W)
+
+  // Machine trap handling related register address definitions
+  val MSCRATCH   = 0x340.U(12.W)
+  val MEPC       = 0x341.U(12.W)
+  val MCAUSE     = 0x342.U(12.W)
+  val MTVAL      = 0x343.U(12.W)
+  val MIP        = 0x344.U(12.W)
+
+  // Machine time (timer) is required to be implemented as memory mapped
+}
+
+// MT -- IO interfaces for class CSR
 class CSRIO extends Bundle with Config {
-  val stall = Input(Bool())
-  val cmd   = Input(UInt(3.W))
-  val in    = Input(UInt(XLEN.W))
-  val out   = Output(UInt(XLEN.W))
+  val stall      = Input(Bool())
+  val cmd        = Input(UInt(3.W))
+  val in         = Input(UInt(XLEN.W))
+  val out        = Output(UInt(XLEN.W))
   // Exception related IOs
-  val pc       = Input(UInt(XLEN.W))
-  val addr     = Input(UInt(XLEN.W))
-  val inst     = Input(UInt(XLEN.W))
-  val illegal  = Input(Bool())
-  val st_type  = Input(UInt(2.W))
-  val ld_type  = Input(UInt(3.W))
-  val pc_check = Input(Bool())
-  val expt     = Output(Bool())
-  val evec     = Output(UInt(XLEN.W))
-  val epc      = Output(UInt(XLEN.W))
+  val pc         = Input(UInt(XLEN.W))
+  val addr       = Input(UInt(XLEN.W))
+  val inst       = Input(UInt(XLEN.W))
+  val illegal    = Input(Bool())
+  val st_type    = Input(UInt(2.W))
+  val ld_type    = Input(UInt(3.W))
+  val pc_check   = Input(Bool())
+  val expt       = Output(Bool())
+  val evec       = Output(UInt(XLEN.W))
+  val epc        = Output(UInt(XLEN.W))
   // MT -- added support for external interrupts using bit 16 and above of mip/mie registers
-  val irq      = new IrqIO
+  val irq        = new IrqIO
 }
 
 class CSR extends Module with Config {
-  val io = IO(new CSRIO)
-
-  val stall_csr = io.stall
-
-  val csr_addr = io.inst(31, 20)
-  val rs1_addr = io.inst(19, 15)
+  val io         = IO(new CSRIO)
+  val stall_csr  = io.stall
+  val csr_addr   = io.inst(31, 20)
+  val rs1_addr   = io.inst(19, 15)
 
   /* User mode time/counters registers */
-  val time = RegInit(0.U(XLEN.W))
-  val timeh = RegInit(0.U(XLEN.W))
-  val cycle = RegInit(0.U(XLEN.W))
-  val cycleh = RegInit(0.U(XLEN.W))
-  val instret = RegInit(0.U(XLEN.W))
-  val instreth = RegInit(0.U(XLEN.W))
+  val time       = RegInit(0.U(XLEN.W))
+  val timeh      = RegInit(0.U(XLEN.W))
+  val cycle      = RegInit(0.U(XLEN.W))
+  val cycleh     = RegInit(0.U(XLEN.W))
+  val instret    = RegInit(0.U(XLEN.W))
+  val instreth   = RegInit(0.U(XLEN.W))
 
   /* MT -- Machine mode register definitions and initializations */
   // readonly registers
-  val mvendorid = 0.U(XLEN.W) // should be updated with the finalized vendor ID
-  val marchid = Cat(0.U(2.W) /* RV32I */ , 0.U((XLEN - 28).W),
-    (1 << ('I' - 'A') /* Base ISA */ |
-      1 << ('U' - 'A')).U(26.W))
-
-  val mimpid  = 0.U(XLEN.W)   // not implemented
-  val mhartid = 0.U(XLEN.W)   // only one hart, not implemented
+  val mvendorid  = 0.U(XLEN.W)   // should be updated with the finalized vendor ID
+  val marchid    = 0.U(XLEN.W)   // not implemented
+  val mimpid     = 0.U(XLEN.W)   // not implemented
+  val mhartid    = 0.U(XLEN.W)   // only one hart, not implemented
 
   /* MT -- currently MLEN = 32 and RV32I based ISA is supported. This register is
   readonly in the current implementation */
-  val misa    = (0x40000100.U(XLEN.W))
+  val misa       = (0x40000100.U(XLEN.W))
 
   // MT -- the bitfield definitions for the following three registers are in CSRdefs.scala
   val mstatus    = Reg(new MstatusCsr)
@@ -134,19 +129,19 @@ class CSR extends Module with Config {
 
   /* MT -- mtvec initialization to default value at reset with vectored interrupt enabled by default (see
      PC_EVEC in Datapath.scala) */
-  val mtvec = RegInit(Const.PC_EVEC.U(XLEN.W))
+  val mtvec      = RegInit(Const.PC_EVEC.U(XLEN.W))
 
   // MT -- Definitions for other exception/interrupt related registers
-  val mscratch = Reg(Bits(XLEN.W))
-  val mepc     = Reg(Bits(XLEN.W))
-  val mcause   = Reg(Bits(XLEN.W))
-  val mtval    = Reg(Bits(XLEN.W))
+  val mscratch   = Reg(Bits(XLEN.W))
+  val mepc       = Reg(Bits(XLEN.W))
+  val mcause     = Reg(Bits(XLEN.W))
+  val mtval      = Reg(Bits(XLEN.W))
 
   // MT -- configure the critical register fields on reset
   when(reset.toBool)
   {
-    mie.muartie := true.B
-    mstatus.mie := true.B
+    mie.muartie  := true.B
+    mstatus.mie  := true.B
     mstatus.prv  := CSR.PRV_M
     mstatus.mpp  := CSR.PRV_M
   }
@@ -173,30 +168,30 @@ class CSR extends Module with Config {
   // reading CSR
   io.out := Lookup(csr_addr, 0.U, csrFile).asUInt
 
-  // Exception or interrupt sources
-  val privValid = csr_addr(9, 8) <= mstatus.prv
-  val privInst  = io.cmd === CSR.P
-  val isEcall   = privInst && !csr_addr(0) && !csr_addr(8)
-  val isEbreak  = privInst &&  csr_addr(0) && !csr_addr(8)
-  val isEret    = privInst && !csr_addr(0) &&  csr_addr(8)
-  val iaddrInvalid = io.pc_check && io.addr(1)
-  val laddrInvalid = MuxLookup(io.ld_type, false.B, Seq(
+  // MT -- Determine the exception source
+  val privValid     = csr_addr(9, 8) <= mstatus.prv
+  val privInst      = io.cmd === CSR.P
+  val isEcall       = privInst && !csr_addr(0) && !csr_addr(8)
+  val isEbreak      = privInst &&  csr_addr(0) && !csr_addr(8)
+  val isEret        = privInst && !csr_addr(0) &&  csr_addr(8)
+  val iaddrInvalid  = io.pc_check && io.addr(1)
+  val laddrInvalid  = MuxLookup(io.ld_type, false.B, Seq(
                                 LD_LW -> io.addr(1, 0).orR, LD_LH -> io.addr(0), LD_LHU -> io.addr(0)))
-  val saddrInvalid = MuxLookup(io.st_type, false.B, Seq(
+  val saddrInvalid  = MuxLookup(io.st_type, false.B, Seq(
                                 ST_SW -> io.addr(1, 0).orR, ST_SH -> io.addr(0)))
+  // MT -- Determine the external interrupt source
   val isUart        =  mip.muartip && mie.muartie
   val isTimer       =  mip.mtip  && mie.mtie
   val isExternal    =  mip.meip && mie.meie
   val isSoftware    =  mip.msip && mie.msie
 
-  val csrValid  = csrFile map (_._1 === csr_addr) reduce (_ || _)
-  val csrRO     = csr_addr(11, 10).andR || csr_addr === CSR.MTVEC
-  val wen       = io.cmd === CSR.W || io.cmd(1) && rs1_addr.orR
-  val wdata     = MuxLookup(io.cmd, 0.U, Seq(
-    CSR.W -> io.in,
-    CSR.S -> (io.out | io.in),
-    CSR.C -> (io.out & ~io.in)
-  ))
+  // MT -- Determine whether CSR address is valid, is it readonly (RO) and if write to CSR is requested
+  val csrValid      = csrFile map (_._1 === csr_addr) reduce (_ || _)
+  val csrRO         = csr_addr(11, 10).andR || csr_addr === CSR.MTVEC
+  val wen           = io.cmd === CSR.W || io.cmd(1) && rs1_addr.orR
+  val wdata         = MuxLookup(io.cmd, 0.U, Seq( CSR.W -> io.in,
+                                                  CSR.S -> (io.out | io.in),
+                                                  CSR.C -> (io.out & ~io.in)))
 
   // MT -- determine the cause of exceptions
   val causeExpt = Mux(iaddrInvalid, Cause.InstAddrMisaligned,
@@ -205,74 +200,77 @@ class CSR extends Module with Config {
                   Mux(isEcall,      Cause.mEcall + mstatus.prv,
                   Mux(isEbreak,     Cause.Breakpoint, Cause.IllegalInst)))))
   // MT -- determine the cause of interrupts
-  val causeInt = Mux(isSoftware,     Cause.mSoftware,
-                 Mux(isExternal,     Cause.mExternal,
-                 Mux(isTimer,        Cause.mTimer,  Cause.mUart )))
+  val causeInt =  Mux(isSoftware,     Cause.mSoftware,
+                  Mux(isExternal,     Cause.mExternal,
+                  Mux(isTimer,        Cause.mTimer,  Cause.mUart )))
 
   // MT -- finalizing the cause as interrupt or exception
-  val isInt = (isUart || isTimer || isExternal || isSoftware) && mstatus.mie
-  val cause = Mux(isInt, causeInt, causeExpt)
+  val isInt      = (isUart || isTimer || isExternal || isSoftware) && mstatus.mie
+  val cause      = Mux(isInt, causeInt, causeExpt)
 
   // MT -- vectored interrupt handling
-  val base  = mtvec >> 2 << 2
-  val mode  = mtvec(1, 0)
-  io.evec := Mux(isInt && mode(0), base + (cause << 2) , base)
+  val base       = mtvec >> 2 << 2
+  val mode       = mtvec(1, 0)
+  io.evec        := Mux(isInt && mode(0), base + (cause << 2) , base)
 
   // MT -- extended for external interrupts using 'isInt' signal. Rest are exceptions
-  io.expt := (io.illegal || iaddrInvalid || laddrInvalid || saddrInvalid ||
-             io.cmd(1, 0).orR && (!csrValid || !privValid) || wen && csrRO || 
-             (privInst && !privValid) || isEcall || isEbreak || isInt)
-  io.epc  := mepc
+  io.expt        := (io.illegal || iaddrInvalid || laddrInvalid || saddrInvalid ||
+                     io.cmd(1, 0).orR && (!csrValid || !privValid) || wen && csrRO ||
+                     (privInst && !privValid) || isEcall || isEbreak || isInt)
+  io.epc         := mepc
 
-  // Counters
-  time := time + 1.U
+  // MT -- Updating time/count registers (64 bit)
+  time           := time + 1.U
   when(time.andR) { timeh := timeh + 1.U }
-  cycle := cycle + 1.U
+
+  cycle          := cycle + 1.U
   when(cycle.andR) { cycleh := cycleh + 1.U }
-  val isInstRet = io.inst =/= Instructions.NOP && (!io.expt || isEcall || isEbreak) && !stall_csr
+
+  val isInstRet  = io.inst =/= Instructions.NOP && (!io.expt || isEcall || isEbreak) && !stall_csr
   when(isInstRet) { instret := instret + 1.U }
   when(isInstRet && instret.andR) { instreth := instreth + 1.U }
 
   // MT -- resolve interrupt tailing. This happens while returning from an interrupt service routine,
   // another interrupt is already pending.
-  val wasEret = RegInit(false.B)
-  wasEret := isEret
+  val wasEret    = RegInit(false.B)
+  wasEret        := isEret
 
   when(!stall_csr) {
     when(io.expt) {
       // MT -- mepc is not updated in case of tailing interrupt, this happens when a new interrupt
       // request (from any source) is pending while returning from an ISR corresponding to a previous
       // interrupt.
-      when(!wasEret){ mepc   := io.pc >> 2 << 2 }
+      when(!wasEret)
+      { mepc       := io.pc >> 2 << 2 }
 
       // MT -- updated to Privilege Spec. 1.11
-      mcause := Cat(Mux(isInt, true.B, false.B), false.B, cause)
+      mcause       := Cat(Mux(isInt, true.B, false.B), false.B, cause)
       mstatus.prv  := CSR.PRV_M
-      mstatus.mie   := false.B
-      mstatus.mpp := mstatus.prv
-      mstatus.mpie  := mstatus.mie
+      mstatus.mie  := false.B
+      mstatus.mpp  := mstatus.prv
+      mstatus.mpie := mstatus.mie
       when(iaddrInvalid || laddrInvalid || saddrInvalid) { mtval := io.addr }
     }.elsewhen(isEret) {
       mstatus.prv  := mstatus.mpp
-      mstatus.mie   := mstatus.mpie
-      mstatus.mpp := CSR.PRV_U
-      mstatus.mpie  := true.B
+      mstatus.mie  := mstatus.mpie
+      mstatus.mpp  := CSR.PRV_U
+      mstatus.mpie := true.B
     }.elsewhen(wen) {
       when(csr_addr === CSR.MSTATUS) {
-        mstatus.mpp := wdata(12, 11)
-        mstatus.mpie  := wdata(7)
+        mstatus.mpp  := wdata(12, 11)
+        mstatus.mpie := wdata(7)
         mstatus.prv  := wdata(24, 23)
-        mstatus.mie   := wdata(3)
+        mstatus.mie  := wdata(3)
       }
       .elsewhen(csr_addr === CSR.MIP) {
-        mip.muartip := wdata(16)
-        mip.mtip := wdata(7)
-        mip.msip := wdata(3)
+        mip.muartip  := wdata(16)
+        mip.mtip     := wdata(7)
+        mip.msip     := wdata(3)
       }
       .elsewhen(csr_addr === CSR.MIE) {
-        mie.muartie := wdata(16)
-        mie.mtie := wdata(7)
-        mie.msie := wdata(3)
+        mie.muartie  := wdata(16)
+        mie.mtie     := wdata(7)
+        mie.msie     := wdata(3)
       }
       .elsewhen(csr_addr === CSR.MTVEC) { mtvec := wdata }
       .elsewhen(csr_addr === CSR.MSCRATCH) { mscratch := wdata }
@@ -281,7 +279,7 @@ class CSR extends Module with Config {
       .elsewhen(csr_addr === CSR.MTVAL) { mtval := wdata }
     }
     // MT -- Make sure external interrupts be connected to appropriate mip register bit-fields
-    mip.muartip := io.irq.uartIrq    // Uart external interrupt
+    mip.muartip      := io.irq.uartIrq    // Uart external interrupt
     // MT -- Connect other external interrupts here
   }
 }
