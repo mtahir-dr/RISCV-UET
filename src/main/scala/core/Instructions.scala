@@ -70,8 +70,8 @@ object Instructions {
   // Change Level
   def ECALL  = BitPat("b00000000000000000000000001110011")
   def EBREAK = BitPat("b00000000000100000000000001110011")
-  def ERET   = BitPat("b00010000000000000000000001110011")
-  def WFI    = BitPat("b00010000001000000000000001110011")
+  def MRET   = BitPat("b00110000001000000000000001110011")  // MT -- updated according to Priv. Spec. 1.11
+  def WFI    = BitPat("b00010000010100000000000001110011")  // MT -- updated according to Priv. Spec. 1.11
 
   def NOP = BitPat.bitPatToUInt(BitPat("b00000000000000000000000000010011"))
 }

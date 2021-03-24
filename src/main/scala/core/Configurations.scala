@@ -20,11 +20,11 @@ trait Config {
   val HLEN           = 16
   val WLEN           = 32
   val XLEN           = 32
-  val INST_MEM_LEN   = 2048
+  val INST_MEM_LEN   = 1024    // MT -- memory size in words (1024 words = 4096 Bytes) and is word addressable
   val REG_LEN        = 5
   val REGFILE_LEN    = 32
   val OPCODE_LEN     = 7
-  val DATA_MEM_LEN   = 1024
+  val DATA_MEM_LEN   = 8192    // MT -- memory size in bytes and is byte addressable
   val NOT_EMBEDDED   = false
 
   // control signal's width
@@ -36,6 +36,15 @@ trait Config {
   val DATA_SIZE_SIG_LEN     = 2
   val LOAD_TYPE_SIG_LEN     = 3
   val MEMWRITE_SRC_SIG_LEN  = 1
+
+  // Wishbone related
+  val WB_SEL_SIZE           = 4
+  val WB_IMEM_ADDR_LOW      = 12
+  val WB_IMEM_ADDR_HIGH     = 15
+  val WB_DMEM_ADDR_LOW      = 12
+  val WB_DMEM_ADDR_HIGH     = 15
+  val WB_UART_ADDR_LOW      = 12
+  val WB_UART_ADDR_HIGH     = 15
 }
 
 

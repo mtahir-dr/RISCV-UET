@@ -22,15 +22,15 @@ import CONSTANTS._
 import CSR._
 
 object Const {
-  val PC_START   = 0x4
-  val PC_EVEC    = 0x61  // vectored interrupt handling by default (mode = 1)
+  val PC_START   = 0x04
+  val PC_EVEC    = 0x09  // vectored interrupt handling by default (mode = 1)
 }
 
 class DatapathIO extends Bundle {
   val debug      = new DebugIO
   val irq        = new IrqIO
-  val imem       = Flipped(new InstMemIO)
-  val dmem       = Flipped(new DataMemIO)
+  val imem       = Flipped(new IMemIO)
+  val dmem       = Flipped(new DMemIO)
   val ctrl       = Flipped(new ControlSignals)
 }
 
@@ -68,12 +68,14 @@ class Datapath extends Module with Config {
   // MT stall is used to manage load-use hazard (for Load and CSR instructions)
   val stall      = Wire(Bool())
   val pc         = RegInit(Const.PC_START.U(XLEN.W) - 4.U(XLEN.W))
-  val npc        = Mux(stall , pc, Mux(csr.io.expt, csr.io.evec,
+  val npc        = Mux(stall || !io.imem.inst_valid , pc, Mux(csr.io.expt, csr.io.evec,
                    Mux(io.ctrl.pc_sel === PC_EPC,  csr.io.epc,
                    Mux(io.ctrl.pc_sel === PC_ALU || brCond.io.taken, alu.io.sum >> 1.U << 1.U,
                    Mux(io.ctrl.pc_sel === PC_0, pc, pc + 4.U)))))
 
-  val inst       = Mux(notstarted || io.ctrl.inst_kill || brCond.io.taken || csr.io.expt, Instructions.NOP, io.imem.inst)
+  // MT -- verify the use of "io.imem.inst_valid" here to insert NOP
+  val inst       = Mux(notstarted || io.ctrl.inst_kill || brCond.io.taken || csr.io.expt || !io.imem.inst_valid,
+                       Instructions.NOP, io.imem.inst)
   pc             := npc
   io.imem.addr   := npc  // address for next instruction fetch from instruction memory
 
@@ -100,10 +102,11 @@ class Datapath extends Module with Config {
   immGen.io.inst := fe_inst
   immGen.io.sel  := io.ctrl.imm_sel
 
-  // bypass
-  val wb_rd_addr = ew_inst(11, 7)
-  val rs1hazard  = wb_en && rs1_addr.orR && (rs1_addr === wb_rd_addr)
-  val rs2hazard  = wb_en && rs2_addr.orR && (rs2_addr === wb_rd_addr)
+  // hazard detection
+  val wrbk_rd_addr = ew_inst(11, 7)
+  val rs1hazard  = wb_en && rs1_addr.orR && (rs1_addr === wrbk_rd_addr)
+  val rs2hazard  = wb_en && rs2_addr.orR && (rs2_addr === wrbk_rd_addr)
+  // forwarding to resolve RAW hazard
   val rs1        = Mux(wb_sel === WB_ALU && rs1hazard, ew_alu, regFile.io.rdata1)
   val rs2        = Mux(wb_sel === WB_ALU && rs2hazard, ew_alu, regFile.io.rdata2)
 
@@ -166,9 +169,13 @@ class Datapath extends Module with Config {
   }
 
   //  data memory load operation
-  io.dmem.rd_en   := ld_type.orR
+  io.dmem.rd_en   := io.ctrl.ld_type.orR
   io.dmem.ld_type := io.ctrl.ld_type
-  val ld_data     = io.dmem.rdata             // MT use "ld_data:= " instead for Asynchronous data memory
+
+  // MT -- read valid is asserted on receiving ack_i from dmem (wishbone slave i.e. io.dmem.valid),
+  // when a read operation (ld_type.orR) was performed
+  val rd_valid    = io.dmem.valid && ld_type.orR
+  val ld_data     = Mux(rd_valid, io.dmem.rdata, 0.U)
   val load        = MuxLookup(ld_type, io.dmem.rdata.zext, Seq(
                              LD_LW  -> ld_data.zext,
                              LD_LH  -> ld_data(15, 0).asSInt, LD_LB  -> ld_data(7, 0).asSInt,
@@ -195,7 +202,7 @@ class Datapath extends Module with Config {
                                 WB_CSR -> csr.io.out.zext) ).asUInt
 
   regFile.io.wen   := wb_en && !csr.io.expt
-  regFile.io.waddr := wb_rd_addr
+  regFile.io.waddr := wrbk_rd_addr
   regFile.io.wdata := regWrite
 
 /* MT  if (p(Trace)) {
@@ -206,7 +213,7 @@ class Datapath extends Module with Config {
 
  // MT -- debug signals defined temporarily, will be finalized later
   io.debug.inst     := fe_inst
-  io.debug.regWaddr := wb_rd_addr
+  io.debug.regWaddr := wrbk_rd_addr
   io.debug.regWdata := regWrite
   io.debug.pc       := fe_pc
 }

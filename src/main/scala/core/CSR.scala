@@ -27,8 +27,8 @@ object Cause {
   val mEcall              = 0x8.U(CAUSE_WIDTH.W)
   val mSoftware           = 0x3.U(CAUSE_WIDTH.W)
   val mTimer              = 0x7.U(CAUSE_WIDTH.W)
-  val mExternal           = 0x11.U(CAUSE_WIDTH.W)
-  val mUart               = 0x1.U(CAUSE_WIDTH.W)   // MT -- defined for testing, should be >= 16
+  val mExternal           = 0xB.U(CAUSE_WIDTH.W)
+  val mUart               = 0x10.U(CAUSE_WIDTH.W)   // MT -- defined for testing, should be >= 0x10
 }
 
 object CSR {
@@ -187,7 +187,7 @@ class CSR extends Module with Config {
 
   // MT -- Determine whether CSR address is valid, is it readonly (RO) and if write to CSR is requested
   val csrValid      = csrFile map (_._1 === csr_addr) reduce (_ || _)
-  val csrRO         = csr_addr(11, 10).andR || csr_addr === CSR.MTVEC
+  val csrRO         = csr_addr(11, 10).andR
   val wen           = io.cmd === CSR.W || io.cmd(1) && rs1_addr.orR
   val wdata         = MuxLookup(io.cmd, 0.U, Seq( CSR.W -> io.in,
                                                   CSR.S -> (io.out | io.in),
